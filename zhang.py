@@ -76,22 +76,38 @@ def displayCorners(images, all_corners, h, w, save_folder):
 
 #-------------------------------------------------------------------------------
 
+def normalization_matrix(data):
+    x, y = data[:, 0], data[:, 1]
+    x_mean, y_mean = x.mean(), y.mean()
+    x_var, y_var = x.var(), y.var()
+    s_x, s_y = np.sqrt(2. / x_var), np.sqrt(2. / y_var)
+
+    norm_matrix = np.array([[s_x,  0., -s_x * x_mean],
+                            [ 0., s_y, -s_y * y_mean],
+                            [ 0.,  0.,            1.]])
+    return norm_matrix
+
 def estimate_H_matrix(world_points, image_corners):
     assert(world_points.shape[0] >= 4)
     
     H_mats = []
+    norm_world_matrix = normalization_matrix(world_points)
+    norm_world = world_points @ norm_world_matrix.T
     for img_crn in image_corners:
+        # Get the homography matrix for a single camera
+        norm_img_crn_matrix = normalization_matrix(img_crn)
+        norm_img_crn = np.hstack([img_crn, np.ones((img_crn.shape[0], 1))]) @ norm_img_crn_matrix.T
         design_matrix = np.vstack([
             np.vstack([
-                np.hstack([world_points[i], np.zeros(3), -world_points[i]*img_crn[i, 0]]),
-                np.hstack([np.zeros(3), world_points[i], -world_points[i]*img_crn[i, 1]]),
+                np.hstack([norm_world[i],   np.zeros(3),    -norm_world[i]*norm_img_crn[i, 0]]),
+                np.hstack([np.zeros(3),     norm_world[i],  -norm_world[i]*norm_img_crn[i, 1]]),
             ])
             for i in range(world_points.shape[0])
         ])
 
         U, S, VT = np.linalg.svd(design_matrix)
         h = VT[-1, :].reshape((3, 3))
-        H_mats.append(h / h[2, 2])
+        H_mats.append( np.linalg.inv(norm_img_crn_matrix) @ h @ norm_world_matrix)
 
     return np.array(H_mats)
 
@@ -172,4 +188,5 @@ if __name__ == "__main__":
     
     printStart("Estimating the Internal Matrix")
     K_int = extract_K_int(B_mat)
+    print(K_int)
     printEnd("Estimating the Internal Matrix")

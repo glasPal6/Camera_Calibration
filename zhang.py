@@ -2,7 +2,8 @@ import numpy as np
 import cv2
 import os
 
-DEBUG = True
+# DEBUG = True
+DEBUG = False
 def printStart(procName): print("[ ] - " + procName, end='\r')
 def printEnd(procName): print("[x] - " + procName)
 
@@ -91,10 +92,38 @@ def estimate_H_matrix(world_points, image_corners):
             ])
         design_matrix = np.array(design_matrix)
         U, S, VT = np.linalg.svd(design_matrix)
-        h = VT[-1, :]
-        H_mats.append(h.reshape((3, 3)))
+        h = VT[-1, :].reshape((3, 3))
+        H_mats.append(h / h[2, 2])
 
     return np.array(H_mats)
+
+def estimate_B_matrix(H_mats):
+    # Contstuct the V matrix
+    Vij = lambda hi, hj: np.array([ hi[0]*hj[0], hi[0]*hj[1] + hi[1]*hj[0], 
+                    hi[1]*hj[1], 
+                    hi[2]*hj[0] + hi[0]*hj[2], hi[2]*hj[1] + hi[1]*hj[2], 
+                    hi[2]*hj[2] ]).T
+
+    V = []
+    for H in H_mats:
+        v12 = Vij(H[:, 0], H[:, 1])
+        v11 = Vij(H[:, 0], H[:, 0])
+        v22 = Vij(H[:, 1], H[:, 1])
+        V.append(v12.T)
+        V.append((v11 - v22).T)
+    V = np.array(V)
+
+    # Solve and construct B
+    U, S, VT = np.linalg.svd(V)
+    b = VT[-1, :]
+
+    B = np.array([
+        [b[0], b[1], b[3]],
+        [b[1], b[2], b[4]],
+        [b[3], b[4], b[5]],
+    ])
+
+    return B
 
 #-------------------------------------------------------------------------------
 
@@ -110,14 +139,17 @@ if __name__ == "__main__":
     if DEBUG: images = images[:1]
     printEnd("Loading images from {FOLDER_NAME}")
 
-    printStart(f"Extracting Image and World Points")
+    printStart("Extracting Image and World Points")
     image_corners = getImagesPoints(images, HEIGHT, WIDTH)
     world_corners = getWorldPoints(SQUARE_SIZE, HEIGHT, WIDTH)
     assert(image_corners.shape[1:] == world_corners.shape)
     if DEBUG: displayCorners(images, image_corners, HEIGHT, WIDTH, SAVE_FOLDER)
     printEnd("Extracting Image and World Points")
 
-    printStart(f"Estimating the Homography Matricies")
+    printStart("Estimating the Homography Matricies")
     H_mats = estimate_H_matrix(world_corners, image_corners)
-    print(H_mats)
     printEnd("Estimating the Homography Matricies")
+
+    printStart("Estimating the B Matricies")
+    B_mat = estimate_B_matrix(H_mats)
+    printEnd("Estimating the B Matricies")

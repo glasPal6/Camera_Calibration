@@ -204,6 +204,26 @@ def extract_K_int(B_mat):
 
 #-------------------------------------------------------------------------------
 
+def extract_R_t_ext(H_mat, K_int):
+    h0, h1, h2 = H_mat[:,0], H_mat[:,1], H_mat[:,2]
+    K_inv = np.linalg.inv(K_int)
+
+    lambda_ = 1. / np.linalg.norm(np.dot(K_inv, h0))
+    r0 = lambda_ * np.dot(K_inv, h0)
+    r1 = lambda_ * np.dot(K_inv, h1)
+    r2 = np.cross(r0, r1)
+    t  = lambda_ * np.dot(K_inv, h2)
+
+    R = np.vstack((r0, r1, r2)).T
+    U, S, V_t = np.linalg.svd(R)
+    R = np.dot(U, V_t)
+
+    P = np.hstack((R, t[:, np.newaxis]))
+
+    return P
+
+#-------------------------------------------------------------------------------
+
 if __name__ == "__main__":
     SQUARE_SIZE = 12.5
     FOLDER_NAME = 'Calibration_Images_Zhang'
@@ -211,27 +231,42 @@ if __name__ == "__main__":
     HEIGHT, WIDTH = (7 - 1, 10 - 1) # -1 due to only taking the inner checkerboard
 
     # Extract the images
-    printStart(f"Loading images from {FOLDER_NAME}")
+    prompt = f"Loading images from {FOLDER_NAME}"
+    printStart(prompt)
     images = loadImages(FOLDER_NAME)
     if DEBUG: images = images[:1]
-    printEnd("Loading images from {FOLDER_NAME}")
+    printEnd(prompt)
 
-    printStart("Extracting Image and World Points")
+    prompt = "Extracting Image and World Points"
+    printStart(prompt)
     image_corners = getImagesPoints(images, HEIGHT, WIDTH)
     world_corners = getWorldPoints(SQUARE_SIZE, HEIGHT, WIDTH)
     assert(image_corners.shape[1] == world_corners.shape[0])
     if DEBUG: displayCorners(images, image_corners, HEIGHT, WIDTH, SAVE_FOLDER)
-    printEnd("Extracting Image and World Points")
+    printEnd(prompt)
 
-    printStart("Estimating the Homography Matricies")
+    prompt = "Estimating the Homography Matricies"
+    printStart(prompt)
     H_mats = estimate_H_matrix(world_corners, image_corners)
-    printEnd("Estimating the Homography Matricies")
+    printEnd(prompt)
 
-    printStart("Estimating the B Matricies")
+    prompt = "Estimating the B Matricies"
+    printStart(prompt)
     B_mat = estimate_B_matrix(H_mats)
-    printEnd("Estimating the B Matricies")
+    printEnd(prompt)
     
-    printStart("Estimating the Internal Matrix")
+    prompt = "Estimating the Internal Matrix"
+    printStart(prompt)
     K_int = extract_K_int(B_mat)
+    printEnd(prompt)
+    print("Intrinsic Parameters:")
     print(K_int)
-    printEnd("Estimating the Internal Matrix")
+
+    prompt = "Estimating the External Matrix"
+    printStart(prompt)
+    E_ext = [
+        extract_R_t_ext(H_mat, K_int)
+        for H_mat in H_mats
+    ]
+    printEnd(prompt)
+

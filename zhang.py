@@ -1,8 +1,8 @@
 import numpy as np
+from scipy.optimize import curve_fit
 import cv2
 import os
 
-from numpy.core.fromnumeric import shape
 
 # DEBUG = True
 DEBUG = False
@@ -87,6 +87,44 @@ def normalization_matrix(data):
                             [ 0.,  0.,            1.]])
     return norm_matrix
 
+def H_opt_f_refine(world_points, *params):
+    """
+    Value function for Levenberg-Marquardt refinement.
+    """
+    h0, h1, h2, h3, h4, h5, h6, h7, h8 = params
+    
+    H = np.array([
+        [h0, h1, h2],
+        [h3, h4, h5],
+        [h6, h7, h8],
+    ])
+
+    img_points = H @ world_points.T
+    img_points /= img_points[-1]
+
+    return img_points[:2].T.flatten()
+
+def H_opt_jac_refine(world_points, *params):
+    """
+    Jacobian function for Levenberg-Marquardt refinement.
+    """
+    h0, h1, h2, h3, h4, h5, h6, h7, h8 = params
+    
+    s_x = h0 * world_points[:, 0] + h1 * world_points[:, 1] + h2
+    s_y = h3 * world_points[:, 0] + h4 * world_points[:, 1] + h5
+    w   = h6 * world_points[:, 0] + h7 * world_points[:, 1] + h8
+    w_sq = w**2
+
+    J = np.vstack([
+        np.vstack([
+            np.hstack([ world_points[i] / w[i], np.zeros(3),            (-s_x[i] * world_points[i]) / w_sq[i]]),
+            np.hstack([ np.zeros(3),            world_points[i] / w[i], (-s_y[i] * world_points[i]) / w_sq[i]]),
+        ])
+        for i in range(world_points.shape[0])
+    ])
+
+    return np.array(J)
+
 def estimate_H_matrix(world_points, image_corners):
     assert(world_points.shape[0] >= 4)
     
@@ -94,7 +132,7 @@ def estimate_H_matrix(world_points, image_corners):
     norm_world_matrix = normalization_matrix(world_points)
     norm_world = world_points @ norm_world_matrix.T
     for img_crn in image_corners:
-        # Get the homography matrix for a single camera
+        # Setup the design matrix to estimate H
         norm_img_crn_matrix = normalization_matrix(img_crn)
         norm_img_crn = np.hstack([img_crn, np.ones((img_crn.shape[0], 1))]) @ norm_img_crn_matrix.T
         design_matrix = np.vstack([
@@ -105,9 +143,16 @@ def estimate_H_matrix(world_points, image_corners):
             for i in range(world_points.shape[0])
         ])
 
+        # Estimate H 
         U, S, VT = np.linalg.svd(design_matrix)
         h = VT[-1, :].reshape((3, 3))
-        H_mats.append( np.linalg.inv(norm_img_crn_matrix) @ h @ norm_world_matrix)
+        h = np.linalg.inv(norm_img_crn_matrix) @ h @ norm_world_matrix
+
+        # Preform non-linear estimation of H
+        popt, pcov = curve_fit(H_opt_f_refine, world_points, img_crn.flatten(), p0=h.flatten(), jac=H_opt_jac_refine)
+        h_refined = popt.reshape((3, 3))
+
+        H_mats.append(h_refined / h_refined[2, 2])
 
     return np.array(H_mats)
 

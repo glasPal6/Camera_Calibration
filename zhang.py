@@ -2,6 +2,8 @@ import numpy as np
 import cv2
 import os
 
+from numpy.core.fromnumeric import shape
+
 # DEBUG = True
 DEBUG = False
 def printStart(procName): print("[ ] - " + procName, end='\r')
@@ -51,6 +53,7 @@ def getWorldPoints(square_side, h, w):
     Yi, Xi = np.indices((h, w)) 
     offset = 0
     lin_homg_pts = np.stack(((Xi.ravel() + offset) * square_side, (Yi.ravel() + offset) * square_side)).T
+    lin_homg_pts = np.hstack([lin_homg_pts, np.ones((lin_homg_pts.shape[0], 1))])
     return lin_homg_pts
 
 def displayCorners(images, all_corners, h, w, save_folder):
@@ -78,19 +81,14 @@ def estimate_H_matrix(world_points, image_corners):
     
     H_mats = []
     for img_crn in image_corners:
-        design_matrix = []
-        for i in range(world_points.shape[0]):
-            design_matrix.append([
-                -world_points[i, 0], -world_points[i, 1], -1, 
-                0, 0, 0, 
-                world_points[i, 0]*img_crn[i, 0], world_points[i, 1]*img_crn[i, 0], img_crn[i, 0]
+        design_matrix = np.vstack([
+            np.vstack([
+                np.hstack([world_points[i], np.zeros(3), -world_points[i]*img_crn[i, 0]]),
+                np.hstack([np.zeros(3), world_points[i], -world_points[i]*img_crn[i, 1]]),
             ])
-            design_matrix.append([
-                0, 0, 0, 
-                -world_points[i, 0], -world_points[i, 1], -1, 
-                world_points[i, 0]*img_crn[i, 1], world_points[i, 1]*img_crn[i, 1], img_crn[i, 1]
-            ])
-        design_matrix = np.array(design_matrix)
+            for i in range(world_points.shape[0])
+        ])
+
         U, S, VT = np.linalg.svd(design_matrix)
         h = VT[-1, :].reshape((3, 3))
         H_mats.append(h / h[2, 2])
@@ -160,7 +158,7 @@ if __name__ == "__main__":
     printStart("Extracting Image and World Points")
     image_corners = getImagesPoints(images, HEIGHT, WIDTH)
     world_corners = getWorldPoints(SQUARE_SIZE, HEIGHT, WIDTH)
-    assert(image_corners.shape[1:] == world_corners.shape)
+    assert(image_corners.shape[1] == world_corners.shape[0])
     if DEBUG: displayCorners(images, image_corners, HEIGHT, WIDTH, SAVE_FOLDER)
     printEnd("Extracting Image and World Points")
 

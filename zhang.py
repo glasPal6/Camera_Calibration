@@ -222,6 +222,38 @@ def extract_R_t_ext(H_mat, K_int):
 
     return P
 
+def calculate_radial_distortion(world_points, image_points, K_int, E_ext):
+    u_c = np.array([K_int[0,2], K_int[1,2]])
+
+    # Observed distortion error and Model distortion error
+    d_dot = []
+    D = []
+    for i in range(image_points.shape[0]):
+        # Projected sensor points
+        P = K_int @ np.hstack([E_ext[i, :, :2], E_ext[i, :, -1].reshape((3, 1))])
+        u_proj = P @ world_points.T
+        u_proj /= u_proj[-1]
+
+        d_dot.append(u_proj[:2, :].T - image_points[i])
+
+        r = np.linalg.norm(u_proj[:2, :].T, axis=1).reshape((-1, 1))
+        D.append(
+            np.hstack([
+                np.vstack((u_proj[:2, :].T - u_c) * np.power(r, 2)),
+                np.vstack((u_proj[:2, :].T - u_c) * np.power(r, 4)),
+            ])
+        )
+
+    d_dot = np.array(d_dot).reshape((-1, 1))
+    D = np.array(D).reshape((-1, 2))
+
+    k_rad = np.linalg.pinv(D) @ d_dot
+
+    return k_rad
+
+def calculate_tangentical_distortion():
+    raise NotImplementedError
+
 #-------------------------------------------------------------------------------
 
 if __name__ == "__main__":
@@ -264,9 +296,18 @@ if __name__ == "__main__":
 
     prompt = "Estimating the External Matrix"
     printStart(prompt)
-    E_ext = [
+    E_ext = np.array([
         extract_R_t_ext(H_mat, K_int)
         for H_mat in H_mats
-    ]
+    ])
     printEnd(prompt)
+
+    prompt = "Estimating the Radial Distortion"
+    printStart(prompt)
+    k_rad = calculate_radial_distortion(world_corners, image_corners, K_int, E_ext)
+    printEnd(prompt)
+    print("Radial Distortion:")
+    print(f"\tk1 - {k_rad[0]}")
+    print(f"\tk2 - {k_rad[1]}")
+
 

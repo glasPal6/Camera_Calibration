@@ -3,6 +3,8 @@ import cv2
 import os
 
 DEBUG = True
+def printStart(procName): print("[ ] - " + procName, end='\r')
+def printEnd(procName): print("[x] - " + procName)
 
 #-------------------------------------------------------------------------------
 
@@ -70,20 +72,52 @@ def displayCorners(images, all_corners, h, w, save_folder):
 
 #-------------------------------------------------------------------------------
 
+def estimate_H_matrix(world_points, image_corners):
+    assert(world_points.shape[0] >= 4)
+    
+    H_mats = []
+    for img_crn in image_corners:
+        design_matrix = []
+        for i in range(world_points.shape[0]):
+            design_matrix.append([
+                -world_points[i, 0], -world_points[i, 1], -1, 
+                0, 0, 0, 
+                world_points[i, 0]*img_crn[i, 0], world_points[i, 1]*img_crn[i, 0], img_crn[i, 0]
+            ])
+            design_matrix.append([
+                0, 0, 0, 
+                -world_points[i, 0], -world_points[i, 1], -1, 
+                world_points[i, 0]*img_crn[i, 1], world_points[i, 1]*img_crn[i, 1], img_crn[i, 1]
+            ])
+        design_matrix = np.array(design_matrix)
+        U, S, VT = np.linalg.svd(design_matrix)
+        h = VT[-1, :]
+        H_mats.append(h.reshape((3, 3)))
+
+    return np.array(H_mats)
+
+#-------------------------------------------------------------------------------
+
 if __name__ == "__main__":
     SQUARE_SIZE = 12.5
     FOLDER_NAME = 'Calibration_Images_Zhang'
     SAVE_FOLDER = 'Save_Folder'
-    HEIGHT, WIDTH = (6,9)
+    HEIGHT, WIDTH = (7 - 1, 10 - 1) # -1 due to only taking the inner checkerboard
 
     # Extract the images
-    print(f"[ ] - Loading images from {FOLDER_NAME}", end='\r')
+    printStart(f"Loading images from {FOLDER_NAME}")
     images = loadImages(FOLDER_NAME)
-    print(f"[x] - Loading images from {FOLDER_NAME}")
+    if DEBUG: images = images[:1]
+    printEnd("Loading images from {FOLDER_NAME}")
 
-    print("[ ] - Extracting Image and World Points", end='\r')
-    all_image_corners = getImagesPoints(images, HEIGHT, WIDTH)
+    printStart(f"Extracting Image and World Points")
+    image_corners = getImagesPoints(images, HEIGHT, WIDTH)
     world_corners = getWorldPoints(SQUARE_SIZE, HEIGHT, WIDTH)
-    assert(all_image_corners.shape[1:] == world_corners.shape)
-    if DEBUG: displayCorners(images, all_image_corners, HEIGHT, WIDTH, SAVE_FOLDER)
-    print("[x] - Extracting Image and World Points")
+    assert(image_corners.shape[1:] == world_corners.shape)
+    if DEBUG: displayCorners(images, image_corners, HEIGHT, WIDTH, SAVE_FOLDER)
+    printEnd("Extracting Image and World Points")
+
+    printStart(f"Estimating the Homography Matricies")
+    H_mats = estimate_H_matrix(world_corners, image_corners)
+    print(H_mats)
+    printEnd("Estimating the Homography Matricies")

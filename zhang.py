@@ -125,6 +125,24 @@ def estimate_B_matrix(H_mats):
 
     return B
 
+def extract_K_int(B_mat):
+    # Extract the K matrix from B
+    try:
+        L = np.linalg.cholesky(B_mat)
+    except:
+        try:
+            L = np.linalg.cholesky(-B_mat)
+        except:
+            raise Exception("B Matrix is not positive definite")
+    K_int = np.linalg.inv(L).T
+
+    # Constust and constrain the K mat
+    K_int /= K_int[2, 2]
+    K_int[1, 0] = 0
+    K_int[2, 0:2] = 0
+
+    return K_int
+
 #-------------------------------------------------------------------------------
 
 if __name__ == "__main__":
@@ -153,3 +171,7 @@ if __name__ == "__main__":
     printStart("Estimating the B Matricies")
     B_mat = estimate_B_matrix(H_mats)
     printEnd("Estimating the B Matricies")
+    
+    printStart("Estimating the Internal Matrix")
+    K_int = extract_K_int(B_mat)
+    printEnd("Estimating the Internal Matrix")

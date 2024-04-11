@@ -230,11 +230,9 @@ def calculate_radial_distortion(world_points, image_points, K_int, E_ext):
     D = []
     for i in range(image_points.shape[0]):
         # Projected sensor points
-        P = K_int @ np.hstack([E_ext[i, :, :2], E_ext[i, :, -1].reshape((3, 1))])
-        u_proj = P @ world_points.T
-        u_proj /= u_proj[-1]
+        u_proj = reproject_pin_hole(world_points.T, K_int, E_ext[i])
 
-        d_dot.append(u_proj[:2, :].T - image_points[i])
+        d_dot.append(u_proj.T - image_points[i])
 
         r = np.linalg.norm(u_proj[:2, :].T, axis=1).reshape((-1, 1))
         D.append(
@@ -290,14 +288,12 @@ def unpack_parameters(parameters):
 
     return K_int, E_ext, k_rad
 
-def refine_parameters_loss_func(world_points, *params):
+def parameter_refinement_loss_func(world_points, *params):
     K_int, E_ext, k_rad = unpack_parameters(params)
 
     img_points = []
     for E in E_ext:
-        P = K_int @ np.hstack([E[:, :2], E[:, -1].reshape((3, 1))])
-        u_proj = P @ world_points.T
-        u_proj /= u_proj[-1]
+        u_proj = reproject_pin_hole(world_points.T, K_int, E)
 
         img_points.append(u_proj[:2, :].T)
     img_points = np.array(img_points)
@@ -305,14 +301,23 @@ def refine_parameters_loss_func(world_points, *params):
     return img_points.flatten()
 
 def parameter_refinement(world_points, image_points, K_int, E_ext, k_rad):
-
     param0 = pack_parameters(K_int, E_ext, k_rad)
 
-    print(image_points.flatten().shape)
-    popt, pcov = curve_fit(refine_parameters_loss_func, world_points, image_points.flatten(), param0)
+    popt, pcov = curve_fit(parameter_refinement_loss_func, world_points, image_points.flatten(), param0)
     
     K_int, E_ext, k_rad = unpack_parameters(popt)
     return K_int, E_ext, k_rad
+
+#-------------------------------------------------------------------------------
+
+def reproject_pin_hole(world_points, K_int, E_ext):
+    P = K_int @ E_ext
+    u_proj = P @ world_points
+    u_proj /= u_proj[-1]
+    return u_proj[:2, :]
+
+def reproject_radial_distortion(world_points, K_int, E_ext, k_rad):
+    raise NotImplementedError
 
 #-------------------------------------------------------------------------------
 
@@ -359,6 +364,15 @@ if __name__ == "__main__":
     E_ext = np.array([
         extract_R_t_ext(H_mat, K_int)
         for H_mat in H_mats
+    ])
+    printEnd(prompt)
+    
+    prompt = "Addind the Z axis to the world coordinates"
+    printStart(prompt)
+    world_corners = np.hstack([
+        world_corners[:, :2], 
+        np.zeros((world_corners.shape[0], 1)), 
+        np.ones((world_corners.shape[0], 1))
     ])
     printEnd(prompt)
 

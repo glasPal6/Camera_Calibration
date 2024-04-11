@@ -218,9 +218,9 @@ def extract_R_t_ext(H_mat, K_int):
     U, S, V_t = np.linalg.svd(R)
     R = np.dot(U, V_t)
 
-    P = np.hstack((R, t[:, np.newaxis]))
+    E = np.hstack((R, t[:, np.newaxis]))
 
-    return P
+    return E
 
 def calculate_radial_distortion(world_points, image_points, K_int, E_ext):
     u_c = np.array([K_int[0,2], K_int[1,2]])
@@ -249,10 +249,70 @@ def calculate_radial_distortion(world_points, image_points, K_int, E_ext):
 
     k_rad = np.linalg.pinv(D) @ d_dot
 
-    return k_rad
+    return k_rad.reshape((2))
 
 def calculate_tangentical_distortion():
     raise NotImplementedError
+
+#-------------------------------------------------------------------------------
+
+def pack_parameters(K_int, E_ext, k_rad):
+    packed_params = []
+
+    alpha, beta, gamma, u_c, v_c = K_int[0,0], K_int[1,1], K_int[0,1], K_int[0,2], K_int[1,2]
+    k0, k1 = k_rad
+    packed_params.extend([alpha, beta, gamma, u_c, v_c, k0, k1])
+
+    for E in E_ext:
+        R = E[:3, :3]
+        t = E[:, 3]
+        rodrigues = cv2.Rodrigues(R)[0]
+        packed_params.extend(rodrigues.reshape((3)))
+        packed_params.extend(t)
+
+    return np.array(packed_params)
+
+def unpack_parameters(parameters):
+    alpha, beta, gamma, u_c, v_c, k0, k1 = parameters[:7]
+    K_int = np.array([[alpha, gamma, u_c],
+                  [   0.,  beta, v_c],
+                  [   0.,    0.,  1.]])
+    k_rad = np.array([k0, k1])
+
+    E_ext = []
+    for i in range(7, len(parameters), 6):
+        rho_x, rho_y, rho_z, t_x, t_y, t_z = parameters[i:i+6]
+        R = cv2.Rodrigues(np.array([rho_x, rho_y, rho_z]))[0]
+        t = np.array([t_x, t_y, t_z])
+
+        E_ext.append(np.hstack([R, t[:, np.newaxis]]))
+    E_ext = np.array(E_ext)
+
+    return K_int, E_ext, k_rad
+
+def refine_parameters_loss_func(world_points, *params):
+    K_int, E_ext, k_rad = unpack_parameters(params)
+
+    img_points = []
+    for E in E_ext:
+        P = K_int @ np.hstack([E[:, :2], E[:, -1].reshape((3, 1))])
+        u_proj = P @ world_points.T
+        u_proj /= u_proj[-1]
+
+        img_points.append(u_proj[:2, :].T)
+    img_points = np.array(img_points)
+
+    return img_points.flatten()
+
+def parameter_refinement(world_points, image_points, K_int, E_ext, k_rad):
+
+    param0 = pack_parameters(K_int, E_ext, k_rad)
+
+    print(image_points.flatten().shape)
+    popt, pcov = curve_fit(refine_parameters_loss_func, world_points, image_points.flatten(), param0)
+    
+    K_int, E_ext, k_rad = unpack_parameters(popt)
+    return K_int, E_ext, k_rad
 
 #-------------------------------------------------------------------------------
 
@@ -309,5 +369,16 @@ if __name__ == "__main__":
     print("Radial Distortion:")
     print(f"\tk1 - {k_rad[0]}")
     print(f"\tk2 - {k_rad[1]}")
+
+    prompt = "Preforming non-linear optimization"
+    printStart(prompt)
+    K_int, E_ext, k_rad = parameter_refinement(world_corners, image_corners, K_int, E_ext, k_rad)
+    printEnd(prompt)
+    print("Intrinsic Parameters:")
+    print(K_int)
+    print("Radial Distortion:")
+    print(f"\tk1 - {k_rad[0]}")
+    print(f"\tk2 - {k_rad[1]}")
+
 
 

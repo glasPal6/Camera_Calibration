@@ -3,11 +3,14 @@ from scipy.optimize import curve_fit
 import cv2
 import os
 
+DEBUG = True
+# DEBUG = False
+debugPrint = print if DEBUG else lambda *a, **k: None
+def printStart(procName): debugPrint("[ ] - " + procName, end='\r')
+def printEnd(procName): debugPrint("[x] - " + procName)
 
-# DEBUG = True
-DEBUG = False
-def printStart(procName): print("[ ] - " + procName, end='\r')
-def printEnd(procName): print("[x] - " + procName)
+import warnings
+warnings.filterwarnings("ignore", message="Covariance of the parameters could not be estimated")
 
 #-------------------------------------------------------------------------------
 
@@ -339,7 +342,6 @@ if __name__ == "__main__":
     prompt = f"Loading images from {FOLDER_NAME}"
     printStart(prompt)
     images = loadImages(FOLDER_NAME)
-    if DEBUG: images = images[:1]
     printEnd(prompt)
 
     prompt = "Extracting Image and World Points"
@@ -347,7 +349,6 @@ if __name__ == "__main__":
     image_corners = getImagesPoints(images, HEIGHT, WIDTH)
     world_corners = getWorldPoints(SQUARE_SIZE, HEIGHT, WIDTH)
     assert(image_corners.shape[1] == world_corners.shape[0])
-    if DEBUG: displayCorners(images, image_corners, HEIGHT, WIDTH, SAVE_FOLDER)
     printEnd(prompt)
 
     prompt = "Estimating the Homography Matricies"

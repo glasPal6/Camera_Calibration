@@ -37,6 +37,23 @@ def loadData(folder_name):
 
 #-------------------------------------------------------------------------------
 
+def getLvec(world_points, img_points, img_centre):
+    x_diff = img_points - img_centre
+    design_matrix = np.vstack([
+        np.hstack([
+            [x_diff[i, :] * world_points[i, 1]],
+            [x_diff[i, :] * -world_points[i, 0]],
+        ])
+        for i in range(x_diff.shape[0])
+    ])
+
+    U, S, VT = np.linalg.svd(design_matrix.T)
+    L_vec = VT[-1, :] / VT[-1, -1]
+
+    return L_vec
+
+def getTy(L_vec):
+    return 1.0 / math.sqrt( (L[4]*L[4]) + (L[5]*L[5]) + (L[6]*L[6]) )
 
 
 #-------------------------------------------------------------------------------
@@ -51,21 +68,25 @@ if __name__ == "__main__":
     prompt = f"Loading Data from {FOLDER_NAME}"
     printStart(prompt)
     world_points, image_points, images = loadData(FOLDER_NAME)
+    image_centres = np.zeros(image_points.shape)
     assert(world_points.shape[0] == image_points.shape[1])
     printEnd(prompt)
 
-    for i, img, img_points in zip(range(image_points.shape[0]), images, image_points):
+    for c, img, img_points, img_centre in zip(range(image_points.shape[0]), images, image_points, image_centres):
         print("--------------------------------------------------------")
-        print(f"Calculating parameters for Camera {i + 1}")
+        print(f"Calculating parameters for Camera {c + 1}")
         print("--------------------------------------------------------")
 
         prompt = f"Calculate L vector"
         printStart(prompt)
+        L_vec = getLvec(world_points, img_points, img_centre)
         printEnd(prompt)
 
         prompt = f"Calculate ty"
         printStart(prompt)
+        ty = getTy(L_vec)
         printEnd(prompt)
+        print("Need to check the sign of ty")
 
         prompt = f"Calculate s"
         printStart(prompt)

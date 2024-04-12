@@ -37,7 +37,7 @@ def loadData(folder_name):
 
 #-------------------------------------------------------------------------------
 
-def getLvec(world_points, img_points, img_centre):
+def calculateLvec(world_points, img_points, img_centre):
     x_diff = img_points - img_centre
     design_matrix = np.vstack([
         np.hstack([
@@ -52,9 +52,24 @@ def getLvec(world_points, img_points, img_centre):
 
     return L_vec
 
-def getTy(L_vec):
-    return 1.0 / math.sqrt( (L[4]*L[4]) + (L[5]*L[5]) + (L[6]*L[6]) )
+def calculateTy(L_vec):
+    return 1.0 / np.sqrt(np.power(L_vec[4:7], 2))
 
+def calculateSx(L_vec, ty):
+    return abs(ty) * np.sqrt(np.power(L_vec[0:3], 2))
+
+def calculateRotation(L_vec, ty, sx):
+    r1 = L_vec[0:3] * (ty / sx)
+    r2 = L_vec[4:7] * ty
+    R_mat = np.vstack([
+        r1,
+        r2,
+        np.cross(r1, r2)
+    ]) 
+    return R_mat 
+
+def calculateTx(L_vec, ty, sx):
+    return L_vec[3] * (ty / sx)
 
 #-------------------------------------------------------------------------------
 
@@ -79,25 +94,28 @@ if __name__ == "__main__":
 
         prompt = f"Calculate L vector"
         printStart(prompt)
-        L_vec = getLvec(world_points, img_points, img_centre)
+        L_vec = calculateLvec(world_points, img_points, img_centre)
         printEnd(prompt)
 
         prompt = f"Calculate ty"
         printStart(prompt)
-        ty = getTy(L_vec)
+        ty = calculateTy(L_vec)
         printEnd(prompt)
-        print("Need to check the sign of ty")
+        print("\nNeed to check the sign of ty\n")
 
         prompt = f"Calculate s"
         printStart(prompt)
+        sx = calculateSx(L_vec, ty)
         printEnd(prompt)
 
         prompt = f"Calculate Rotation Matirx"
         printStart(prompt)
+        R_mat = calculateRotation(L_vec, ty, sx)
         printEnd(prompt)
 
         prompt = f"Calculate tx"
         printStart(prompt)
+        tx = calculateTx(L_vec, ty, sx)
         printEnd(prompt)
 
         prompt = f"Approximate f and tz"

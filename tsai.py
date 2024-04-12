@@ -26,6 +26,7 @@ def loadData(folder_name):
     image_points_file = sorted(glob(f"{folder_name}/*_image_points.txt"), key=lambda x: int(x[len(folder_name) + 1]))
 
     world_points = np.loadtxt(world_points_file)
+    world_points = np.hstack([world_points, np.ones((world_points.shape[0], 1))])
     images = []
     image_points = []
     for img, pt in zip(image_files, image_points_file):
@@ -53,10 +54,40 @@ if __name__ == "__main__":
     assert(world_points.shape[0] == image_points.shape[1])
     printEnd(prompt)
 
-    prompt = f""
-    printStart(prompt)
-    printEnd(prompt)
+    for i, img, img_points in zip(range(image_points.shape[0]), images, image_points):
+        print("--------------------------------------------------------")
+        print(f"Calculating parameters for Camera {i + 1}")
+        print("--------------------------------------------------------")
 
+        prompt = f"Calculate L vector"
+        printStart(prompt)
+        printEnd(prompt)
+
+        prompt = f"Calculate ty"
+        printStart(prompt)
+        printEnd(prompt)
+
+        prompt = f"Calculate s"
+        printStart(prompt)
+        printEnd(prompt)
+
+        prompt = f"Calculate Rotation Matirx"
+        printStart(prompt)
+        printEnd(prompt)
+
+        prompt = f"Calculate tx"
+        printStart(prompt)
+        printEnd(prompt)
+
+        prompt = f"Approximate f and tz"
+        printStart(prompt)
+        printEnd(prompt)
+
+        prompt = f"Peforming non-linear optimization"
+        printStart(prompt)
+        printEnd(prompt)
+
+        print("--------------------------------------------------------")
 
 
 

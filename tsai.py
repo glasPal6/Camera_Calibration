@@ -71,6 +71,70 @@ def calculateRotation(L_vec, ty, sx):
 def calculateTx(L_vec, ty, sx):
     return L_vec[3] * (ty / sx)
 
+def calculateFandTz():
+    raise NotImplementedError
+
+#-------------------------------------------------------------------------------
+
+def pack_parameters(K_int, E_ext):
+    packed_params = []
+
+    alpha, beta, gamma, u_c, v_c = K_int[0,0], K_int[1,1], K_int[0,1], K_int[0,2], K_int[1,2]
+    packed_params.extend([alpha, beta, gamma, u_c, v_c])
+
+    for E in E_ext:
+        R = E[:3, :3]
+        t = E[:, 3]
+        rodrigues = cv2.Rodrigues(R)[0]
+        packed_params.extend(rodrigues.reshape((3)))
+        packed_params.extend(t)
+
+    return np.array(packed_params)
+
+def unpack_parameters(parameters):
+    alpha, beta, gamma, u_c, v_c, = parameters[:7]
+    K_int = np.array([[alpha, gamma, u_c],
+                  [   0.,  beta, v_c],
+                  [   0.,    0.,  1.]])
+
+    E_ext = []
+    for i in range(7, len(parameters), 6):
+        rho_x, rho_y, rho_z, t_x, t_y, t_z = parameters[i:i+6]
+        R = cv2.Rodrigues(np.array([rho_x, rho_y, rho_z]))[0]
+        t = np.array([t_x, t_y, t_z])
+
+        E_ext.append(np.hstack([R, t[:, np.newaxis]]))
+    E_ext = np.array(E_ext)
+
+    return K_int, E_ext
+
+def parameter_refinement_loss_func(world_points, *params):
+    K_int, E_ext = unpack_parameters(params)
+
+    img_points = []
+    for E in E_ext:
+        u_proj = reproject_pin_hole(world_points.T, K_int, E)
+        img_points.append(u_proj[:2, :].T)
+    img_points = np.array(img_points)
+
+    return img_points.flatten()
+
+def parameter_refinement(world_points, image_points, K_int, E_ext):
+    param0 = pack_parameters(K_int, E_ext)
+
+    popt, pcov = curve_fit(parameter_refinement_loss_func, world_points, image_points.flatten(), param0)
+    
+    K_int, E_ext = unpack_parameters(popt)
+    return K_int, E_ext
+
+#-------------------------------------------------------------------------------
+
+def reproject_pin_hole(world_points, K_int, E_ext):
+    P = K_int @ E_ext
+    u_proj = P @ world_points
+    u_proj /= u_proj[-1]
+    return u_proj[:2, :]
+
 #-------------------------------------------------------------------------------
 
 if __name__ == "__main__":
@@ -120,10 +184,12 @@ if __name__ == "__main__":
 
         prompt = f"Approximate f and tz"
         printStart(prompt)
+        f, tz = calculateFandTz()
         printEnd(prompt)
 
         prompt = f"Peforming non-linear optimization"
         printStart(prompt)
+        K_int, E_ext = parameter_refinement(world_corners, image_corners, K_int, E_ext, k_rad)
         printEnd(prompt)
 
         print("--------------------------------------------------------")

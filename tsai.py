@@ -71,8 +71,25 @@ def calculateRotation(L_vec, ty, sx):
 def calculateTx(L_vec, ty, sx):
     return L_vec[3] * (ty / sx)
 
-def calculateFandTz():
-    raise NotImplementedError
+def calculateFandTz(world_points, image_points, R_mat, ty, tx, sx):
+    A = np.vstack([
+        np.vstack([
+            np.hstack([(sx * R_mat[0, :] @ world_points[i, 0:3] + tx), -image_points[i, 0]]),
+            np.hstack([(sx * R_mat[1, :] @ world_points[i, 0:3] + ty), -image_points[i, 1]]),
+        ])
+        for i in range(world_points.shape[0])
+    ])
+    b = np.vstack([
+        np.vstack([
+            R_mat[2, :] @ world_points[i, 0:3] * image_points[i, 0],
+            R_mat[2, :] @ world_points[i, 0:3] * image_points[i, 1],
+        ])
+        for i in range(world_points.shape[0])
+    ])
+
+    x = np.linalg.pinv(A) @ b
+
+    return x[0, 0], x[1, 0]
 
 #-------------------------------------------------------------------------------
 
@@ -184,12 +201,13 @@ if __name__ == "__main__":
 
         prompt = f"Approximate f and tz"
         printStart(prompt)
-        f, tz = calculateFandTz()
+        f, tz = calculateFandTz(world_points, img_points, R_mat, ty, tx, sx)
         printEnd(prompt)
 
         prompt = f"Peforming non-linear optimization"
         printStart(prompt)
-        K_int, E_ext = parameter_refinement(world_corners, image_corners, K_int, E_ext, k_rad)
+        K_int = np
+        K_int, E_ext = parameter_refinement(world_points, img_points, K_int, E_ext)
         printEnd(prompt)
 
         print("--------------------------------------------------------")

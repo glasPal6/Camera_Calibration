@@ -74,8 +74,8 @@ def calculateTx(L_vec, ty, sx):
 def calculateFandTz(world_points, image_points, R_mat, ty, tx, sx):
     A = np.vstack([
         np.vstack([
-            np.hstack([(sx * R_mat[0, :] @ world_points[i, 0:3] + tx), -image_points[i, 0]]),
-            np.hstack([(sx * R_mat[1, :] @ world_points[i, 0:3] + ty), -image_points[i, 1]]),
+            np.hstack([(sx * R_mat[0, :] @ world_points[i, 0:3] + tx), 0, -image_points[i, 0]]),
+            np.hstack([0, (sx * R_mat[1, :] @ world_points[i, 0:3] + ty), -image_points[i, 1]]),
         ])
         for i in range(world_points.shape[0])
     ])
@@ -89,7 +89,7 @@ def calculateFandTz(world_points, image_points, R_mat, ty, tx, sx):
 
     x = np.linalg.pinv(A) @ b
 
-    return x[0, 0], x[1, 0]
+    return x[0, 0], x[1, 0], x[2, 0]
 
 #-------------------------------------------------------------------------------
 
@@ -201,12 +201,17 @@ if __name__ == "__main__":
 
         prompt = f"Approximate f and tz"
         printStart(prompt)
-        f, tz = calculateFandTz(world_points, img_points, R_mat, ty, tx, sx)
+        fx, fy, tz = calculateFandTz(world_points, img_points, R_mat, ty, tx, sx)
         printEnd(prompt)
 
         prompt = f"Peforming non-linear optimization"
         printStart(prompt)
-        K_int = np
+        E_ext = np.hstack([R_mat, np.vstack([tx, ty, tz])])
+        K_int = np.array([
+            [fx, sx, 0],
+            [0, fy, 0],
+            [0, 0, 1]
+        ])
         K_int, E_ext = parameter_refinement(world_points, img_points, K_int, E_ext)
         printEnd(prompt)
 

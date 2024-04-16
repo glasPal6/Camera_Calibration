@@ -53,10 +53,10 @@ def calculateLvec(world_points, img_points, img_centre):
     return L_vec
 
 def calculateTy(L_vec):
-    return 1.0 / np.sqrt(np.power(L_vec[4:7], 2))
+    return 1.0 / np.linalg.norm(L_vec[4:7])
 
 def calculateSx(L_vec, ty):
-    return abs(ty) * np.sqrt(np.power(L_vec[0:3], 2))
+    return abs(ty) * np.linalg.norm(L_vec[0:3])
 
 def calculateRotation(L_vec, ty, sx):
     r1 = L_vec[0:3] * (ty / sx)

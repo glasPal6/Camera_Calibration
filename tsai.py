@@ -38,16 +38,16 @@ def loadData(folder_name):
 #-------------------------------------------------------------------------------
 
 def calculateLvec(world_points, img_points, img_centre):
-    x_diff = img_points - img_centre
+    measurements = img_points - img_centre
     design_matrix = np.vstack([
         np.hstack([
-            [x_diff[i, :] * world_points[i, 1]],
-            [x_diff[i, :] * -world_points[i, 0]],
+             world_points[i, :] * measurements[i, 1],
+             world_points[i, :] * -measurements[i, 0],
         ])
-        for i in range(x_diff.shape[0])
+        for i in range(measurements.shape[0])
     ])
 
-    U, S, VT = np.linalg.svd(design_matrix.T)
+    U, S, VT = np.linalg.svd(design_matrix)
     L_vec = VT[-1, :] / VT[-1, -1]
 
     return L_vec
@@ -58,9 +58,19 @@ def calculateTy(L_vec):
 def calculateSx(L_vec, ty):
     return abs(ty) * np.linalg.norm(L_vec[0:3])
 
+def calculateTx(L_vec, ty, sx):
+    return L_vec[3] * (ty / sx)
+
 def calculateRotation(L_vec, ty, sx):
     r1 = L_vec[0:3] * (ty / sx)
     r2 = L_vec[4:7] * ty
+    # r1_t = L_vec[0:3] * (ty / sx)
+    # r2_t = L_vec[4:7] * ty
+    # k = -0.5 * r1_t @ r2_t
+    # r1 = r1_t + k * r2_t
+    # r2 = r2_t + k * r1_t
+    # r1 /= np.linalg.norm(r1)
+    # r2 /= np.linalg.norm(r2)
     R_mat = np.vstack([
         r1,
         r2,
@@ -68,8 +78,6 @@ def calculateRotation(L_vec, ty, sx):
     ]) 
     return R_mat 
 
-def calculateTx(L_vec, ty, sx):
-    return L_vec[3] * (ty / sx)
 
 def calculateFandTz(world_points, image_points, R_mat, ty, tx, sx):
     A = np.vstack([
@@ -174,7 +182,7 @@ def reproject_pin_hole(world_points, K_int, E_ext):
     return u_proj[:2, :]
 
 def reproject_radial_distortion(world_points, K_int, E_ext, k_rad):
-    camera_points = (E_ext @ world_points)
+    camera_points = E_ext @ world_points
     camera_points = camera_points[:2, :] / camera_points[2, :]
 
     r = np.linalg.norm(camera_points, axis=0).reshape((1, -1))
@@ -197,7 +205,7 @@ if __name__ == "__main__":
     prompt = f"Loading Data from {FOLDER_NAME}"
     printStart(prompt)
     world_points, image_points, images = loadData(FOLDER_NAME)
-    image_centres = np.zeros(image_points.shape)
+    image_centres = np.zeros((image_points.shape[0], 2))
     assert(world_points.shape[0] == image_points.shape[1])
     printEnd(prompt)
 
@@ -222,14 +230,14 @@ if __name__ == "__main__":
         sx = calculateSx(L_vec, ty)
         printEnd(prompt)
 
-        prompt = f"Calculate Rotation Matirx"
-        printStart(prompt)
-        R_mat = calculateRotation(L_vec, ty, sx)
-        printEnd(prompt)
-
         prompt = f"Calculate tx"
         printStart(prompt)
         tx = calculateTx(L_vec, ty, sx)
+        printEnd(prompt)
+
+        prompt = f"Calculate Rotation Matirx"
+        printStart(prompt)
+        R_mat = calculateRotation(L_vec, ty, sx)
         printEnd(prompt)
 
         prompt = f"Approximate f and tz"
@@ -238,8 +246,8 @@ if __name__ == "__main__":
         printEnd(prompt)
         E_ext = np.hstack([R_mat, np.vstack([tx, ty, tz])])
         K_int = np.array([
-            [fx, sx, 0],
-            [0, fy, 0],
+            [fx, sx, img_centre[0]],
+            [0, fy, img_centre[1]],
             [0, 0, 1]
         ])
         print("Intrinsic Parameters:")
